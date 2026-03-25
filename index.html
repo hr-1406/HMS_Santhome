@@ -44,8 +44,18 @@
       <!-- Login Form -->
       <form id="login-form" class="space-y-4">
         <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Login as</label>
+          <select id="login-role" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+            <option value="student" selected>Student</option>
+            <option value="parent">Parent</option>
+            <option value="warden">Warden</option>
+            <option value="admin">Admin</option>
+          </select>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Choose your role first, then enter credentials.</p>
+        </div>
+        <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
-          <input id="login-user" type="text" required placeholder="admin, student reg no, or parent ID" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+          <input id="login-user" type="text" required placeholder="admin, student reg no, parent ID, or warden ID" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
@@ -202,7 +212,7 @@
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-        <h3 class="text-lg font-semibold mb-4">Recent Activity</h3>
+        <h3 id="overview-activity-title" class="text-lg font-semibold mb-4">Recent Activity</h3>
         <div id="overview-activity" class="space-y-0 max-h-80 overflow-y-auto pr-1"><p class="text-gray-400 text-sm">Loading...</p></div>
       </div>
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
@@ -341,7 +351,7 @@
                   <th class="px-4 py-3">Out Date</th>
                   <th class="px-4 py-3">In Date</th>
                   <th class="px-4 py-3">Parent</th>
-                  <th class="px-4 py-3">Admin</th>
+                  <th class="px-4 py-3">Warden</th>
                   <th id="movement-actions-head" class="px-4 py-3 rounded-tr-lg hidden">Actions</th>
                 </tr>
               </thead>
@@ -598,6 +608,7 @@
             <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Warden ID</label><input id="aw-id" type="text" required placeholder="e.g. W001" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
             <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label><input id="aw-name" type="text" required placeholder="Warden name" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
             <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile</label><input id="aw-mobile" type="tel" required placeholder="e.g. 9876543210" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Login Password</label><input id="aw-pass" type="password" placeholder="Optional (defaults to mobile)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
             <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned Hostel</label>
               <select id="aw-hostel" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                 <option value="">Select hostel...</option>

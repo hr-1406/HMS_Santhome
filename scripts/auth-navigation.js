@@ -23,28 +23,41 @@ document.getElementById('login-form').addEventListener('submit', async e => {
   e.preventDefault();
   const user = document.getElementById('login-user').value.trim();
   const pass = document.getElementById('login-pass').value;
+  const selectedRole = document.getElementById('login-role')?.value || 'student';
   const errEl = document.getElementById('login-error');
 
-  // Check if admin
-  if (user === ADMIN_USER && pass === ADMIN_PASS) {
-    errEl.classList.add('hidden');
-    sessionStorage.setItem('hms-role', 'admin');
-    showDashboard('admin');
+  // Admin login path
+  if (selectedRole === 'admin') {
+    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+      errEl.classList.add('hidden');
+      sessionStorage.setItem('hms-role', 'admin');
+      showDashboard('admin');
+    } else {
+      errEl.textContent = 'Invalid admin username or password.';
+      errEl.classList.remove('hidden');
+    }
     return;
   }
 
-  // Check if parent (support both parent_id and legacy patent_id)
-  let parent = null;
-  {
-    const res = await sb.from('parent').select('parent_id, reg_no, mobile').eq('parent_id', user).single();
-    if (!res.error) {
-      parent = res.data;
-    } else if ((res.error.message || '').toLowerCase().includes("could not find the 'parent_id' column")) {
-      const legacyRes = await sb.from('parent').select('patent_id, reg_no, mobile').eq('patent_id', user).single();
-      if (!legacyRes.error) parent = legacyRes.data;
+  // Parent login path
+  if (selectedRole === 'parent') {
+    // Check if parent (support both parent_id and legacy patent_id)
+    let parent = null;
+    {
+      const res = await sb.from('parent').select('parent_id, reg_no, mobile').eq('parent_id', user).single();
+      if (!res.error) {
+        parent = res.data;
+      } else if ((res.error.message || '').toLowerCase().includes("could not find the 'parent_id' column")) {
+        const legacyRes = await sb.from('parent').select('patent_id, reg_no, mobile').eq('patent_id', user).single();
+        if (!legacyRes.error) parent = legacyRes.data;
+      }
     }
-  }
-  if (parent) {
+    if (!parent) {
+      errEl.textContent = 'Parent account not found for this Parent ID.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
     const parentCreds = getParentCreds();
     const fallbackPass = String(parent.mobile || '').trim();
     const expectedPass = Object.prototype.hasOwnProperty.call(parentCreds, user) ? parentCreds[user] : fallbackPass;
@@ -71,10 +84,66 @@ document.getElementById('login-form').addEventListener('submit', async e => {
     return;
   }
 
-  // Check if student
+  // Warden login path
+  if (selectedRole === 'warden') {
+    let warden = null;
+    {
+      const byWardenId = await sb.from('warden').select('warden_id, id, name, mobile').eq('warden_id', user).maybeSingle();
+      if (!byWardenId.error && byWardenId.data) {
+        warden = byWardenId.data;
+      }
+
+      if (!warden) {
+        const byLegacyId = await sb.from('warden').select('id, name, mobile').eq('id', user).maybeSingle();
+        if (!byLegacyId.error && byLegacyId.data) {
+          warden = byLegacyId.data;
+        }
+      }
+
+      if (!warden) {
+        const byOnlyWardenId = await sb.from('warden').select('warden_id, name, mobile').eq('warden_id', user).maybeSingle();
+        if (!byOnlyWardenId.error && byOnlyWardenId.data) {
+          warden = byOnlyWardenId.data;
+        }
+      }
+    }
+    if (!warden) {
+      errEl.textContent = 'Warden account not found for this Warden ID.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    const resolvedId = String(warden.warden_id ?? warden.id ?? user);
+    const wardenCreds = getWardenCreds();
+    const fallbackPass = String(warden.mobile || '').trim();
+    const expectedPass = Object.prototype.hasOwnProperty.call(wardenCreds, resolvedId)
+      ? wardenCreds[resolvedId]
+      : (Object.prototype.hasOwnProperty.call(wardenCreds, user) ? wardenCreds[user] : fallbackPass);
+
+    if (!expectedPass) {
+      errEl.textContent = 'No warden credentials are set. Ask admin to set warden login password.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (pass !== expectedPass) {
+      errEl.textContent = 'Incorrect warden password.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    errEl.classList.add('hidden');
+    currentWardenId = resolvedId;
+    sessionStorage.setItem('hms-role', 'warden');
+    sessionStorage.setItem('warden-id', currentWardenId);
+    await loadStudents();
+    showDashboard('warden');
+    return;
+  }
+
+  // Student login path
   const { data: student } = await sb.from('student').select('reg_no').eq('reg_no', user).single();
   if (!student) {
-    errEl.textContent = 'Invalid username or password.';
+    errEl.textContent = 'Student registration number not found.';
     errEl.classList.remove('hidden');
     return;
   }
@@ -149,6 +218,7 @@ function showDashboard(role) {
   currentRole = role;
   if (role !== 'student') currentStudentReg = null;
   if (role !== 'parent') { currentParentId = null; currentParentReg = null; }
+  if (role !== 'warden') currentWardenId = null;
   document.getElementById('login-screen').classList.add('hidden');
   const roleText = document.getElementById('role-text');
   const roleBadge = document.getElementById('role-badge');
@@ -158,6 +228,12 @@ function showDashboard(role) {
     roleText.textContent = 'Admin';
     roleBadge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300';
     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+    logoutBtn.classList.remove('hidden');
+    movementActionsHead.classList.remove('hidden');
+  } else if (role === 'warden') {
+    roleText.textContent = 'Warden (' + currentWardenId + ')';
+    roleBadge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-300';
+    document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
     logoutBtn.classList.remove('hidden');
     movementActionsHead.classList.remove('hidden');
   } else if (role === 'parent') {
@@ -179,16 +255,22 @@ function showDashboard(role) {
     logoutBtn.classList.remove('hidden');
     movementActionsHead.classList.add('hidden');
   }
+
+  if (typeof loadRecentActivity === 'function') {
+    loadRecentActivity();
+  }
 }
 
 document.getElementById('guest-btn').addEventListener('click', () => {
   currentStudentReg = null;
   currentParentId = null;
   currentParentReg = null;
+  currentWardenId = null;
   sessionStorage.setItem('hms-role', 'guest');
   sessionStorage.removeItem('student-reg');
   sessionStorage.removeItem('parent-id');
   sessionStorage.removeItem('parent-reg');
+  sessionStorage.removeItem('warden-id');
   showDashboard('guest');
 });
 
@@ -197,13 +279,16 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   sessionStorage.removeItem('student-reg');
   sessionStorage.removeItem('parent-id');
   sessionStorage.removeItem('parent-reg');
+  sessionStorage.removeItem('warden-id');
   currentRole = null;
   currentStudentReg = null;
   currentParentId = null;
   currentParentReg = null;
+  currentWardenId = null;
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
+  if (document.getElementById('login-role')) document.getElementById('login-role').value = 'student';
   document.getElementById('login-error').classList.add('hidden');
   document.getElementById('signup-reg').value = '';
   document.getElementById('signup-pass').value = '';
@@ -229,9 +314,13 @@ const savedRole = sessionStorage.getItem('hms-role');
 const savedStudentReg = sessionStorage.getItem('student-reg');
 const savedParentId = sessionStorage.getItem('parent-id');
 const savedParentReg = sessionStorage.getItem('parent-reg');
+const savedWardenId = sessionStorage.getItem('warden-id');
 if (savedRole === 'student' && savedStudentReg) {
   currentStudentReg = savedStudentReg;
   showDashboard('student');
+} else if (savedRole === 'warden' && savedWardenId) {
+  currentWardenId = savedWardenId;
+  showDashboard('warden');
 } else if (savedRole === 'parent' && savedParentId) {
   currentParentId = savedParentId;
   currentParentReg = savedParentReg;

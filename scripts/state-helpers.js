@@ -8,9 +8,11 @@ let currentRole = null;
 let currentStudentReg = null; // for student login
 let currentParentId = null;
 let currentParentReg = null;
+let currentWardenId = null;
 const ADMIN_USER = 'admin', ADMIN_PASS = 'admin123';
 const STUDENT_CREDS_KEY = 'hms-student-creds';
 const PARENT_CREDS_KEY = 'hms-parent-creds';
+const WARDEN_CREDS_KEY = 'hms-warden-creds';
 let allStudents = [];
 
 function getStudentCreds() {
@@ -35,6 +37,18 @@ function getParentCreds() {
 
 function saveParentCreds(creds) {
   localStorage.setItem(PARENT_CREDS_KEY, JSON.stringify(creds));
+}
+
+function getWardenCreds() {
+  try {
+    return JSON.parse(localStorage.getItem(WARDEN_CREDS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveWardenCreds(creds) {
+  localStorage.setItem(WARDEN_CREDS_KEY, JSON.stringify(creds));
 }
 
 // Helpers

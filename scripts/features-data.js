@@ -1,13 +1,18 @@
 // Overview Stats
 async function loadOverviewStats() {
-  const [hostels, rooms, students, complaints, movements, payments] = await Promise.all([
+  const [hostels, rooms, students, complaints, payments] = await Promise.all([
     sb.from('hostel').select('hostel_id', { count: 'exact', head: true }),
     sb.from('room').select('room_no', { count: 'exact', head: true }),
     sb.from('student').select('reg_no', { count: 'exact', head: true }),
     sb.from('complaint').select('complaint_id', { count: 'exact', head: true }).eq('status', 'Pending'),
-    sb.from('movement_request').select('request_id', { count: 'exact', head: true }).eq('admin_approval', 'Pending'),
     sb.from('payment').select('payment_id', { count: 'exact', head: true }),
   ]);
+
+  let movements = await sb.from('movement_request').select('request_id', { count: 'exact', head: true }).eq('warden_approval', 'Pending');
+  if (movements.error && (movements.error.message || '').toLowerCase().includes("could not find the 'warden_approval' column")) {
+    movements = await sb.from('movement_request').select('request_id', { count: 'exact', head: true }).eq('admin_approval', 'Pending');
+  }
+
   document.getElementById('stat-hostels').textContent = hostels.count ?? 0;
   document.getElementById('stat-rooms').textContent = rooms.count ?? 0;
   document.getElementById('stat-students').textContent = students.count ?? 0;
@@ -125,6 +130,10 @@ function renderComplaints(list) {
 }
 
 async function updateComplaintStatus(id, status) {
+  if (currentRole !== 'admin') {
+    showMsg('comp-msg', 'Only admin can update complaint status.', false);
+    return;
+  }
   if (!status) return;
   const { error } = await sb.from('complaint').update({ status }).eq('complaint_id', id);
   if (!error) { loadComplaints(); loadOverviewStats(); }
@@ -161,9 +170,9 @@ async function loadMovements() {
 
 function renderMovements(list) {
   const tbody = document.getElementById('movement-tbody');
-  const isAdmin = currentRole === 'admin';
+  const isWardenActor = currentRole === 'admin' || currentRole === 'warden';
   const isParent = currentRole === 'parent';
-  const canAct = isAdmin || isParent;
+  const canAct = isWardenActor || isParent;
   if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="${canAct?6:5}" class="px-4 py-6 text-center text-gray-400">No movement requests yet.</td></tr>`; return; }
   tbody.innerHTML = list.map(r => `
     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -171,8 +180,8 @@ function renderMovements(list) {
       <td class="px-4 py-3 dark:text-gray-300">${esc(r.out_date || '')}</td>
       <td class="px-4 py-3 dark:text-gray-300">${esc(r.in_date || '')}</td>
       <td class="px-4 py-3">${statusBadge(r.parent_approval || 'Pending')}</td>
-      <td class="px-4 py-3">${statusBadge(r.admin_approval || 'Pending')}</td>
-      ${canAct ? `<td class="px-4 py-3 text-center">${isAdmin ? (isApprovedStatus(r.parent_approval)
+      <td class="px-4 py-3">${statusBadge(r.warden_approval ?? r.admin_approval ?? 'Pending')}</td>
+      ${canAct ? `<td class="px-4 py-3 text-center">${isWardenActor ? (isApprovedStatus(r.parent_approval)
         ? `<div class="flex gap-1 justify-center">
           <button onclick="approveMovement(${r.request_id},'Approved')" class="text-xs px-2 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">Approve</button>
           <button onclick="approveMovement(${r.request_id},'Rejected')" class="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">Reject</button>
@@ -205,9 +214,14 @@ async function parentReviewMovement(id, isApproved) {
   }
   loadMovements();
   loadOverviewStats();
+  loadRecentActivity();
 }
 
 async function approveMovement(id, status) {
+  if (currentRole !== 'admin' && currentRole !== 'warden') {
+    alert('Only warden/admin can approve movement requests.');
+    return;
+  }
   const { data: req, error: fetchError } = await sb.from('movement_request').select('parent_approval').eq('request_id', id).single();
   if (fetchError) {
     alert('Error: ' + fetchError.message);
@@ -219,6 +233,8 @@ async function approveMovement(id, status) {
   }
 
   const candidates = [
+    { warden_approval: status === 'Approved' },
+    { warden_approval: status },
     { admin_approval: status === 'Approved' },
     { admin_approval: status },
   ];
@@ -231,7 +247,18 @@ async function approveMovement(id, status) {
     const msg = (error.message || '').toLowerCase();
     if (!msg.includes('invalid input syntax for type boolean')) break;
   }
-  if (!error) { loadMovements(); loadOverviewStats(); }
+  if (!error) { loadMovements(); loadOverviewStats(); loadRecentActivity(); }
+}
+
+async function getNextMovementRequestId() {
+  const { data, error } = await sb
+    .from('movement_request')
+    .select('request_id')
+    .order('request_id', { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return 1;
+  const lastId = Number(data[0].request_id) || 0;
+  return lastId + 1;
 }
 
 document.getElementById('movement-form').addEventListener('submit', async e => {
@@ -251,6 +278,10 @@ document.getElementById('movement-form').addEventListener('submit', async e => {
   if (!reg || !outDate || !inDate) return;
   const base = { reg_no: reg, out_date: outDate, in_date: inDate };
   const candidates = [
+    { ...base, reason, parent_approval: false, warden_approval: false },
+    { ...base, parent_approval: false, warden_approval: false },
+    { ...base, reason, parent_approval: 'Pending', warden_approval: 'Pending' },
+    { ...base, parent_approval: 'Pending', warden_approval: 'Pending' },
     { ...base, reason, parent_approval: false, admin_approval: false },
     { ...base, parent_approval: false, admin_approval: false },
     { ...base, reason, parent_approval: 'Pending', admin_approval: 'Pending' },
@@ -260,12 +291,22 @@ document.getElementById('movement-form').addEventListener('submit', async e => {
   ];
 
   let error = null;
+  let nextRequestId = null;
   for (const row of candidates) {
     const res = await sb.from('movement_request').insert([row]);
     error = res.error;
     if (!error) break;
 
     const msg = (error.message || '').toLowerCase();
+    const needsManualId = msg.includes('null value in column') && msg.includes('request_id');
+    if (needsManualId) {
+      if (nextRequestId === null) nextRequestId = await getNextMovementRequestId();
+      const retry = await sb.from('movement_request').insert([{ ...row, request_id: nextRequestId }]);
+      error = retry.error;
+      if (!error) break;
+      nextRequestId += 1;
+    }
+
     const isSchemaMismatch =
       msg.includes('schema cache') ||
       msg.includes('column') ||
@@ -345,26 +386,95 @@ document.getElementById('payment-form').addEventListener('submit', async e => {
 });
 
 // Wardens
+const WARDEN_HOSTEL_MAP_KEY = 'hms-warden-hostel-map';
+
+function getWardenHostelMap() {
+  try {
+    return JSON.parse(localStorage.getItem(WARDEN_HOSTEL_MAP_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveWardenHostelMap(map) {
+  localStorage.setItem(WARDEN_HOSTEL_MAP_KEY, JSON.stringify(map));
+}
+
+function inferHostelValue(wardenRow) {
+  const direct = wardenRow.hostel_id ?? wardenRow.hostel_no ?? wardenRow.host_id ?? wardenRow.hostel;
+  if (direct !== undefined && direct !== null && String(direct) !== '') return direct;
+
+  const key = Object.keys(wardenRow).find(k => /hostel|host/i.test(k));
+  if (!key) return null;
+  const val = wardenRow[key];
+  if (val === undefined || val === null || String(val) === '') return null;
+  return val;
+}
+
+async function fetchWardensCompat() {
+  const variants = [
+    { id: 'warden_id', hostel: 'hostel_id' },
+    { id: 'id', hostel: 'hostel_id' },
+    { id: 'warden_id', hostel: 'hostel_no' },
+    { id: 'id', hostel: 'hostel_no' },
+  ];
+
+  for (const v of variants) {
+    const { data, error } = await sb.from('warden').select('*').order(v.id);
+    if (!error) return { data: data || [], map: v };
+    const msg = (error.message || '').toLowerCase();
+    const missingColumn = msg.includes('could not find') || msg.includes('does not exist');
+    if (!missingColumn) return { data: null, map: v, error };
+  }
+  return { data: null, map: { id: 'warden_id', hostel: 'hostel_id' } };
+}
+
 async function loadWardens() {
-  const { data } = await sb.from('warden').select('*').order('warden_id');
+  const { data, map, error } = await fetchWardensCompat();
+  const hostelMap = getWardenHostelMap();
   const tbody = document.getElementById('warden-tbody');
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-red-500">Error: ${esc(error.message)}</td></tr>`;
+    return;
+  }
   if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-400">No wardens added yet.</td></tr>'; return; }
   tbody.innerHTML = data.map(w => `
     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-      <td class="px-4 py-3 font-medium dark:text-white">${esc(String(w.warden_id))}</td>
+      <td class="px-4 py-3 font-medium dark:text-white">${esc(String(w[map.id] ?? ''))}</td>
       <td class="px-4 py-3 dark:text-gray-300">${esc(w.name)}</td>
       <td class="px-4 py-3 dark:text-gray-300">${esc(w.mobile || '—')}</td>
-      <td class="px-4 py-3 dark:text-gray-300">${esc(String(w.hostel_id || '—'))}</td>
+      <td class="px-4 py-3 dark:text-gray-300">${esc(String(w[map.hostel] ?? inferHostelValue(w) ?? hostelMap[String(w[map.id] ?? '')] ?? '—'))}</td>
       <td class="px-4 py-3 text-center">
-        <button onclick="deleteWarden('${esc(String(w.warden_id))}')" class="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors">Delete</button>
+        <button onclick="deleteWarden('${esc(String(w[map.id] ?? ''))}')" class="text-xs px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors">Delete</button>
       </td>
     </tr>`).join('');
 }
 
 async function deleteWarden(id) {
   if (!confirm('Delete warden ' + id + '?')) return;
-  const { error } = await sb.from('warden').delete().eq('warden_id', id);
-  if (error) alert('Error: ' + error.message); else loadWardens();
+  let error = null;
+  {
+    const byWardenId = await sb.from('warden').delete().eq('warden_id', id);
+    error = byWardenId.error;
+    const msg = (error?.message || '').toLowerCase();
+    if (error && msg.includes("could not find the 'warden_id' column")) {
+      const byId = await sb.from('warden').delete().eq('id', id);
+      error = byId.error;
+    }
+  }
+  if (error) {
+    alert('Error: ' + error.message);
+  } else {
+    const hostelMap = getWardenHostelMap();
+    delete hostelMap[String(id)];
+    saveWardenHostelMap(hostelMap);
+
+    const wardenCreds = getWardenCreds();
+    delete wardenCreds[String(id)];
+    saveWardenCreds(wardenCreds);
+
+    loadWardens();
+  }
 }
 
 document.getElementById('add-warden-form').addEventListener('submit', async e => {
@@ -372,9 +482,42 @@ document.getElementById('add-warden-form').addEventListener('submit', async e =>
   const id = document.getElementById('aw-id').value.trim();
   const name = document.getElementById('aw-name').value.trim();
   const mobile = document.getElementById('aw-mobile').value.trim();
+  const pass = document.getElementById('aw-pass')?.value || '';
   const hostelId = document.getElementById('aw-hostel').value.trim();
   if (!id || !name || !mobile || !hostelId) return;
-  const { error } = await sb.from('warden').insert([{ warden_id: id, name, mobile, hostel_id: hostelId }]);
+  let error = null;
+  {
+    const attempts = [
+      { warden_id: id, name, mobile, hostel_id: hostelId },
+      { id, name, mobile, hostel_id: hostelId },
+      { warden_id: id, name, mobile, hostel_no: hostelId },
+      { id, name, mobile, hostel_no: hostelId },
+      { warden_id: id, name, mobile, host_id: hostelId },
+      { id, name, mobile, host_id: hostelId },
+      { warden_id: id, name, mobile, hostel: hostelId },
+      { id, name, mobile, hostel: hostelId },
+      { warden_id: id, name, mobile },
+      { id, name, mobile },
+    ];
+    for (const row of attempts) {
+      const res = await sb.from('warden').insert([row]);
+      error = res.error;
+      if (!error) break;
+      const msg = (error.message || '').toLowerCase();
+      const isMissingColumn = msg.includes('schema cache') || msg.includes('could not find') || msg.includes('does not exist');
+      if (!isMissingColumn) break;
+    }
+  }
+
+  if (!error) {
+    const hostelMap = getWardenHostelMap();
+    hostelMap[String(id)] = hostelId;
+    saveWardenHostelMap(hostelMap);
+
+    const wardenCreds = getWardenCreds();
+    wardenCreds[String(id)] = pass || mobile;
+    saveWardenCreds(wardenCreds);
+  }
   showMsg('aw-msg', error ? 'Error: ' + error.message : 'Warden added!', !error);
   if (!error) { document.getElementById('add-warden-form').reset(); loadWardens(); }
 });
@@ -422,25 +565,38 @@ async function deleteParent(id) {
 
 document.getElementById('add-parent-form').addEventListener('submit', async e => {
   e.preventDefault();
-  const id = document.getElementById('ap-id').value.trim();
+  const idRaw = document.getElementById('ap-id').value.trim();
   const name = document.getElementById('ap-name').value.trim();
   const mobile = document.getElementById('ap-mobile').value.trim();
   const email = document.getElementById('ap-email').value.trim();
   const pass = document.getElementById('ap-pass').value;
   const reg = document.getElementById('ap-reg').value;
-  if (!id || !name || !mobile || !email || !reg) return;
+  if (!idRaw || !name || !mobile || !email || !reg) return;
+
+  const isNumericId = /^\d+$/.test(idRaw);
+  const numericId = isNumericId ? parseInt(idRaw, 10) : null;
+  const credentialKey = isNumericId ? String(numericId) : idRaw;
+
   let error = null;
   {
-    const res = await sb.from('parent').insert([{ parent_id: id, name, mobile, email_id: email, reg_no: reg }]);
+    const parentIdValue = isNumericId ? numericId : idRaw;
+    const res = await sb.from('parent').insert([{ parent_id: parentIdValue, name, mobile, email_id: email, reg_no: reg }]);
     error = res.error;
-    if (error && (error.message || '').toLowerCase().includes("could not find the 'parent_id' column")) {
-      const legacyRes = await sb.from('parent').insert([{ patent_id: id, name, mobile, email_id: email, reg_no: reg }]);
+    const msg = (error?.message || '').toLowerCase();
+
+    if (error && msg.includes('invalid input syntax for type integer')) {
+      showMsg('ap-msg', 'Parent ID must be numeric in your current database schema (example: 111).', false);
+      return;
+    }
+
+    if (error && msg.includes("could not find the 'parent_id' column")) {
+      const legacyRes = await sb.from('parent').insert([{ patent_id: idRaw, name, mobile, email_id: email, reg_no: reg }]);
       error = legacyRes.error;
     }
   }
   if (!error) {
     const parentCreds = getParentCreds();
-    parentCreds[id] = pass || mobile;
+    parentCreds[credentialKey] = pass || mobile;
     saveParentCreds(parentCreds);
   }
   showMsg('ap-msg', error ? 'Error: ' + error.message : 'Parent added!', !error);
@@ -579,6 +735,101 @@ async function populateRoomDropdown() {
 // Recent Activity
 async function loadRecentActivity() {
   const container = document.getElementById('overview-activity');
+  const titleEl = document.getElementById('overview-activity-title');
+
+  if (currentRole === 'warden') {
+    if (titleEl) titleEl.textContent = 'Awaiting Warden Approval';
+
+    let rows = null;
+    {
+      const res = await sb
+        .from('movement_request')
+        .select('request_id, reg_no, out_date, in_date, parent_approval, warden_approval, student(name)')
+        .order('request_id', { ascending: false });
+      if (!res.error) {
+        rows = res.data || [];
+      } else if ((res.error.message || '').toLowerCase().includes("could not find the 'warden_approval' column")) {
+        const fallback = await sb
+          .from('movement_request')
+          .select('request_id, reg_no, out_date, in_date, parent_approval, admin_approval, student(name)')
+          .order('request_id', { ascending: false });
+        if (fallback.error) {
+          container.innerHTML = '<p class="text-red-500 text-sm py-4">Failed to load awaiting requests.</p>';
+          return;
+        }
+        rows = fallback.data || [];
+      } else {
+        container.innerHTML = '<p class="text-red-500 text-sm py-4">Failed to load awaiting requests.</p>';
+        return;
+      }
+    }
+
+    const awaiting = (rows || []).filter(r => {
+      const parentApproved = isApprovedStatus(r.parent_approval);
+      const wardenField = r.warden_approval ?? r.admin_approval;
+      const wardenPending = typeof wardenField === 'boolean'
+        ? wardenField === false
+        : String(wardenField || 'pending').toLowerCase() === 'pending';
+      return parentApproved && wardenPending;
+    });
+
+    if (awaiting.length === 0) {
+      container.innerHTML = '<p class="text-gray-400 text-sm py-4 text-center">No requests awaiting warden approval.</p>';
+      return;
+    }
+
+    container.innerHTML = awaiting.map(r => `
+      <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-3 mb-3">
+        <p class="text-sm font-medium text-gray-900 dark:text-white">${esc(r.student?.name || String(r.reg_no))}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Out: ${esc(r.out_date || '—')} &middot; In: ${esc(r.in_date || '—')}</p>
+        <div class="mt-3 flex gap-2">
+          <button onclick="approveMovement(${r.request_id},'Approved')" class="text-xs px-2.5 py-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">Approve</button>
+          <button onclick="approveMovement(${r.request_id},'Rejected')" class="text-xs px-2.5 py-1.5 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">Reject</button>
+        </div>
+      </div>
+    `).join('');
+    return;
+  }
+
+  if (currentRole === 'parent' && currentParentReg) {
+    if (titleEl) titleEl.textContent = 'Pending Movement Requests';
+
+    const { data, error } = await sb
+      .from('movement_request')
+      .select('request_id, reg_no, out_date, in_date, parent_approval, student(name)')
+      .eq('reg_no', currentParentReg)
+      .order('request_id', { ascending: false });
+
+    if (error) {
+      container.innerHTML = '<p class="text-red-500 text-sm py-4">Failed to load pending requests.</p>';
+      return;
+    }
+
+    const pending = (data || []).filter(r => {
+      if (typeof r.parent_approval === 'boolean') return r.parent_approval === false;
+      const s = String(r.parent_approval || 'pending').toLowerCase();
+      return s === 'pending';
+    });
+
+    if (pending.length === 0) {
+      container.innerHTML = '<p class="text-gray-400 text-sm py-4 text-center">No pending movement requests.</p>';
+      return;
+    }
+
+    container.innerHTML = pending.map(r => `
+      <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-3 mb-3">
+        <p class="text-sm font-medium text-gray-900 dark:text-white">${esc(r.student?.name || String(r.reg_no))}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Out: ${esc(r.out_date || '—')} &middot; In: ${esc(r.in_date || '—')}</p>
+        <div class="mt-3 flex gap-2">
+          <button onclick="parentReviewMovement(${r.request_id}, true)" class="text-xs px-2.5 py-1.5 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">Approve</button>
+          <button onclick="parentReviewMovement(${r.request_id}, false)" class="text-xs px-2.5 py-1.5 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">Reject</button>
+        </div>
+      </div>
+    `).join('');
+    return;
+  }
+
+  if (titleEl) titleEl.textContent = 'Recent Activity';
   const { data } = await sb.from('student').select('reg_no, name, room_no, created_at').order('created_at', { ascending: false }).limit(5);
   if (!data || data.length === 0) { container.innerHTML = '<p class="text-gray-400 text-sm py-4 text-center">No recent activity.</p>'; return; }
   container.innerHTML = data.map((s, i) => {
