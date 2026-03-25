@@ -106,7 +106,11 @@ function renderComplaints(list) {
     overview.innerHTML = '<p class="text-gray-400 text-sm">No complaints yet.</p>';
     return;
   }
-  const isAdmin = currentRole === 'admin';
+  const canManageComplaints = currentRole === 'admin' || currentRole === 'warden';
+  const isDoneStatus = status => {
+    const value = String(status || '').toLowerCase();
+    return value === 'done' || value === 'resolved' || value === 'completed';
+  };
   const renderCard = c => `
     <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-sm transition-shadow dark:bg-gray-700">
       <div class="flex items-start justify-between gap-3">
@@ -116,12 +120,13 @@ function renderComplaints(list) {
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           ${statusBadge(c.status)}
-          ${isAdmin ? `<select onchange="updateComplaintStatus(${c.complaint_id}, this.value)" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-indigo-500 outline-none">
+          ${canManageComplaints ? `<select onchange="updateComplaintStatus(${c.complaint_id}, this.value)" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-indigo-500 outline-none">
             <option value="">Update...</option>
             <option value="Pending" ${c.status==='Pending'?'selected':''}>Pending</option>
             <option value="In Progress" ${c.status==='In Progress'?'selected':''}>In Progress</option>
-            <option value="Resolved" ${c.status==='Resolved'?'selected':''}>Resolved</option>
+            <option value="Done" ${String(c.status||'').toLowerCase()==='done'?'selected':''}>Done</option>
           </select>` : ''}
+          ${canManageComplaints && isDoneStatus(c.status) ? `<button onclick="deleteComplaint(${c.complaint_id})" class="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">Delete</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -130,13 +135,49 @@ function renderComplaints(list) {
 }
 
 async function updateComplaintStatus(id, status) {
-  if (currentRole !== 'admin') {
-    showMsg('comp-msg', 'Only admin can update complaint status.', false);
+  if (currentRole !== 'admin' && currentRole !== 'warden') {
+    showMsg('comp-msg', 'Only warden/admin can update complaint status.', false);
     return;
   }
   if (!status) return;
   const { error } = await sb.from('complaint').update({ status }).eq('complaint_id', id);
   if (!error) { loadComplaints(); loadOverviewStats(); }
+}
+
+async function deleteComplaint(id) {
+  if (currentRole !== 'admin' && currentRole !== 'warden') {
+    showMsg('comp-msg', 'Only warden/admin can delete complaints.', false);
+    return;
+  }
+
+  const { data: complaint, error: fetchError } = await sb
+    .from('complaint')
+    .select('status')
+    .eq('complaint_id', id)
+    .single();
+
+  if (fetchError) {
+    showMsg('comp-msg', 'Error: ' + fetchError.message, false);
+    return;
+  }
+
+  const status = String(complaint?.status || '').toLowerCase();
+  if (status !== 'done' && status !== 'resolved' && status !== 'completed') {
+    showMsg('comp-msg', 'Only complaints marked done can be deleted.', false);
+    return;
+  }
+
+  if (!confirm('Delete complaint #' + id + '?')) return;
+
+  const { error } = await sb.from('complaint').delete().eq('complaint_id', id);
+  if (error) {
+    showMsg('comp-msg', 'Error: ' + error.message, false);
+    return;
+  }
+
+  showMsg('comp-msg', 'Complaint deleted.', true);
+  loadComplaints();
+  loadOverviewStats();
 }
 
 document.getElementById('complaint-form').addEventListener('submit', async e => {
@@ -608,6 +649,152 @@ function populateParentStudentDropdown() {
   document.getElementById('ap-reg').innerHTML = opts;
 }
 
+// Demo Seed: 10 student-parent login pairs
+const DEMO_ACCOUNTS_VERSION = 'v2';
+const DEMO_ACCOUNTS_SEED_KEY = 'hms-demo-student-parent-seed';
+const PARENT_PASSWORD_RESET_KEY = 'hms-parent-password-reset-v1';
+const PARENT_PURGE_ONCE_KEY = 'hms-parent-purge-once-v1';
+
+async function purgeAllParentsOnce() {
+  if (localStorage.getItem(PARENT_PURGE_ONCE_KEY) === 'done') return;
+
+  let error = null;
+
+  // Try broad delete by a common column first.
+  {
+    const res = await sb.from('parent').delete().neq('reg_no', '');
+    error = res.error;
+  }
+
+  // Fallbacks for schema drift.
+  if (error) {
+    const msg = (error.message || '').toLowerCase();
+    const schemaIssue = msg.includes('could not find') || msg.includes('does not exist') || msg.includes('schema cache');
+    if (schemaIssue) {
+      const byParentId = await sb.from('parent').delete().not('parent_id', 'is', null);
+      error = byParentId.error;
+      if (error) {
+        const msg2 = (error.message || '').toLowerCase();
+        if (msg2.includes('could not find') || msg2.includes('does not exist') || msg2.includes('schema cache')) {
+          const byLegacyId = await sb.from('parent').delete().not('patent_id', 'is', null);
+          error = byLegacyId.error;
+        }
+      }
+    }
+  }
+
+  if (!error) {
+    saveParentCreds({});
+    localStorage.setItem(PARENT_PURGE_ONCE_KEY, 'done');
+  }
+}
+
+async function ensureDemoStudentParentAccounts() {
+  const seedState = localStorage.getItem(DEMO_ACCOUNTS_SEED_KEY);
+  const shouldEnsureDbRows = seedState !== DEMO_ACCOUNTS_VERSION;
+
+  const demoPairs = [
+    { regNo: '112', studentName: 'Arjun Kumar', branch: 'CSE', year: 1, studentMobile: '9000001112', parentId: '112', parentName: 'Ravi Kumar', parentMobile: '9100001112' },
+    { regNo: '113', studentName: 'Divya R', branch: 'ECE', year: 2, studentMobile: '9000001113', parentId: '113', parentName: 'Lakshmi R', parentMobile: '9100001113' },
+    { regNo: '114', studentName: 'Karthik S', branch: 'EEE', year: 1, studentMobile: '9000001114', parentId: '114', parentName: 'Suresh S', parentMobile: '9100001114' },
+    { regNo: '115', studentName: 'Meera P', branch: 'IT', year: 3, studentMobile: '9000001115', parentId: '115', parentName: 'Priya P', parentMobile: '9100001115' },
+    { regNo: '116', studentName: 'Naveen B', branch: 'MECH', year: 2, studentMobile: '9000001116', parentId: '116', parentName: 'Balaji B', parentMobile: '9100001116' },
+    { regNo: '117', studentName: 'Sneha V', branch: 'CIVIL', year: 4, studentMobile: '9000001117', parentId: '117', parentName: 'Vasanthi V', parentMobile: '9100001117' },
+    { regNo: '118', studentName: 'Rahul T', branch: 'CSE', year: 2, studentMobile: '9000001118', parentId: '118', parentName: 'Thangaraj T', parentMobile: '9100001118' },
+    { regNo: '119', studentName: 'Ananya M', branch: 'ECE', year: 1, studentMobile: '9000001119', parentId: '119', parentName: 'Mohan M', parentMobile: '9100001119' },
+    { regNo: '120', studentName: 'Vikram N', branch: 'AIDS', year: 3, studentMobile: '9000001120', parentId: '120', parentName: 'Nirmala N', parentMobile: '9100001120' },
+    { regNo: '121', studentName: 'Keerthi A', branch: 'BME', year: 2, studentMobile: '9000001121', parentId: '121', parentName: 'Arun A', parentMobile: '9100001121' },
+  ];
+
+  let roomNos = [];
+  if (shouldEnsureDbRows) {
+    const { data: rooms } = await sb.from('room').select('room_no').order('room_no');
+    roomNos = (rooms || []).map(r => r.room_no).filter(v => v !== null && v !== undefined);
+  }
+
+  const studentCreds = getStudentCreds();
+  const parentCreds = getParentCreds();
+
+  // One-time bulk reset for easier parent login during testing.
+  if (localStorage.getItem(PARENT_PASSWORD_RESET_KEY) !== 'done') {
+    Object.keys(parentCreds).forEach(id => {
+      parentCreds[id] = '12345';
+    });
+    localStorage.setItem(PARENT_PASSWORD_RESET_KEY, 'done');
+  }
+
+  for (let i = 0; i < demoPairs.length; i += 1) {
+    const pair = demoPairs[i];
+    const roomNo = roomNos.length > 0 ? roomNos[i % roomNos.length] : null;
+
+    if (shouldEnsureDbRows) {
+      // Ensure student exists
+      const studentCheck = await sb.from('student').select('reg_no').eq('reg_no', pair.regNo).maybeSingle();
+      if (!studentCheck.error && !studentCheck.data) {
+        const studentRow = {
+          reg_no: pair.regNo,
+          name: pair.studentName,
+          branch: pair.branch,
+          year: pair.year,
+          room_no: roomNo,
+          mobile: pair.studentMobile,
+          email_id: `student${pair.regNo}@hms.local`,
+        };
+        await sb.from('student').insert([studentRow]);
+      }
+
+      // Ensure parent exists (support parent_id and legacy patent_id)
+      let parentExists = false;
+      {
+        const byParentId = await sb.from('parent').select('parent_id').eq('parent_id', pair.parentId).maybeSingle();
+        if (!byParentId.error && byParentId.data) {
+          parentExists = true;
+        } else {
+          const byLegacyId = await sb.from('parent').select('patent_id').eq('patent_id', pair.parentId).maybeSingle();
+          if (!byLegacyId.error && byLegacyId.data) parentExists = true;
+        }
+      }
+
+      if (!parentExists) {
+        const parentNumeric = parseInt(pair.parentId, 10);
+        let insertError = null;
+        {
+          const res = await sb.from('parent').insert([{
+            parent_id: Number.isNaN(parentNumeric) ? pair.parentId : parentNumeric,
+            name: pair.parentName,
+            mobile: pair.parentMobile,
+            email_id: `parent${pair.parentId}@hms.local`,
+            reg_no: pair.regNo,
+          }]);
+          insertError = res.error;
+        }
+
+        if (insertError) {
+          const msg = (insertError.message || '').toLowerCase();
+          if (msg.includes("could not find the 'parent_id' column")) {
+            await sb.from('parent').insert([{
+              patent_id: pair.parentId,
+              name: pair.parentName,
+              mobile: pair.parentMobile,
+              email_id: `parent${pair.parentId}@hms.local`,
+              reg_no: pair.regNo,
+            }]);
+          }
+        }
+      }
+    }
+
+    studentCreds[pair.regNo] = `${pair.regNo}${pair.regNo}`;
+    parentCreds[pair.parentId] = '12345';
+  }
+
+  saveStudentCreds(studentCreds);
+  saveParentCreds(parentCreds);
+  if (shouldEnsureDbRows) {
+    localStorage.setItem(DEMO_ACCOUNTS_SEED_KEY, DEMO_ACCOUNTS_VERSION);
+  }
+}
+
 // Admin: Manage Students
 function renderAdminStudents(list) {
   const tbody = document.getElementById('admin-student-tbody');
@@ -632,6 +819,10 @@ document.getElementById('admin-student-search').addEventListener('input', e => {
 
 document.getElementById('add-student-form').addEventListener('submit', async e => {
   e.preventDefault();
+  if (currentRole !== 'admin' && currentRole !== 'warden') {
+    showMsg('as-msg', 'Only warden/admin can manage room members.', false);
+    return;
+  }
   const btn = document.getElementById('as-submit');
   const regNo = document.getElementById('as-reg').value.trim();
   const name = document.getElementById('as-name').value.trim();
@@ -650,6 +841,10 @@ document.getElementById('add-student-form').addEventListener('submit', async e =
 });
 
 async function deleteStudent(regNo) {
+  if (currentRole !== 'admin' && currentRole !== 'warden') {
+    alert('Only warden/admin can manage room members.');
+    return;
+  }
   if (!confirm('Delete student ' + regNo + '?')) return;
   const { error } = await sb.from('student').delete().eq('reg_no', regNo);
   if (error) { alert('Error: ' + error.message); return; }
@@ -657,6 +852,10 @@ async function deleteStudent(regNo) {
 }
 
 async function deleteAllStudents() {
+  if (currentRole !== 'admin' && currentRole !== 'warden') {
+    alert('Only warden/admin can manage room members.');
+    return;
+  }
   if (!allStudents || allStudents.length === 0) { alert('No students to delete.'); return; }
   if (!confirm('Delete ALL ' + allStudents.length + ' students? This cannot be undone.')) return;
   if (!confirm('Are you absolutely sure?')) return;
@@ -860,5 +1059,7 @@ sb.channel('hms-realtime')
 
 // Initial Load
 (async () => {
+  await ensureDemoStudentParentAccounts();
+  await purgeAllParentsOnce();
   await Promise.all([loadOverviewStats(), loadRooms(), loadStudents(), loadComplaints(), populateRoomDropdown(), loadRecentActivity()]);
 })();

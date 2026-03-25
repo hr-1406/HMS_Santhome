@@ -60,7 +60,14 @@ document.getElementById('login-form').addEventListener('submit', async e => {
 
     const parentCreds = getParentCreds();
     const fallbackPass = String(parent.mobile || '').trim();
-    const expectedPass = Object.prototype.hasOwnProperty.call(parentCreds, user) ? parentCreds[user] : fallbackPass;
+    const isDemoParent = /^\d+$/.test(user) && Number(user) >= 112 && Number(user) <= 121;
+    if (isDemoParent) {
+      parentCreds[user] = '12345';
+      saveParentCreds(parentCreds);
+    }
+    const expectedPass = isDemoParent
+      ? '12345'
+      : (Object.prototype.hasOwnProperty.call(parentCreds, user) ? parentCreds[user] : fallbackPass);
 
     if (!expectedPass) {
       errEl.textContent = 'No parent credentials are set. Ask admin to set parent login password.';
@@ -234,6 +241,8 @@ function showDashboard(role) {
     roleText.textContent = 'Warden (' + currentWardenId + ')';
     roleBadge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-300';
     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
+    const manageStudentsLink = document.querySelector('.sidebar-link[data-section="manage"]');
+    if (manageStudentsLink) manageStudentsLink.classList.remove('hidden');
     logoutBtn.classList.remove('hidden');
     movementActionsHead.classList.remove('hidden');
   } else if (role === 'parent') {
@@ -415,12 +424,13 @@ const meta = {
 };
 
 const adminSections = ['manage', 'manage-rooms', 'manage-wardens', 'manage-parents'];
+const wardenSections = ['manage'];
 
 links.forEach(link => {
   link.addEventListener('click', e => {
     e.preventDefault();
     const sec = link.dataset.section;
-    if (adminSections.includes(sec) && currentRole !== 'admin') return;
+    if (adminSections.includes(sec) && currentRole !== 'admin' && !(currentRole === 'warden' && wardenSections.includes(sec))) return;
     links.forEach(l => l.classList.remove('active'));
     link.classList.add('active');
     sections.forEach(s => s.classList.remove('active'));
