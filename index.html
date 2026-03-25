@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hostel Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .sidebar-link.active { background-color: rgba(99,102,241,0.15); color: #6366f1; border-right: 3px solid #6366f1; }
+    .dark .sidebar-link.active { background-color: rgba(99,102,241,0.25); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .dark ::-webkit-scrollbar-thumb { background: #475569; }
+    .sidebar-group-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; padding: 12px 12px 4px; }
+  </style>
+  <script>if (localStorage.getItem('hms-dark')==='true') document.documentElement.classList.add('dark');</script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-h-screen flex transition-colors duration-200">
+
+<!-- ========== LOGIN ========== -->
+<div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+  <div class="w-full max-w-md mx-4">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl mb-4">
+        <svg class="w-9 h-9 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>
+      </div>
+      <h1 class="text-3xl font-bold text-white">HMS Dashboard</h1>
+      <p class="text-white/70 mt-1">Hostel Management System</p>
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8">
+      <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-6 text-center">Sign In</h2>
+      
+      <div class="flex gap-2 justify-center mb-6">
+        <button id="form-toggle-login" class="form-toggle active px-4 py-2 text-sm font-medium bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-lg cursor-pointer">Login</button>
+        <button id="form-toggle-signup" class="form-toggle px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg cursor-pointer">Sign Up</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
+          <input id="login-user" type="text" required placeholder="admin, student reg no, or parent ID" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+          <input id="login-pass" type="password" required placeholder="Enter password" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div id="login-error" class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 rounded-lg px-4 py-2"></div>
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Login</button>
+      </form>
+
+      <!-- Signup Form -->
+      <form id="signup-form" class="hidden space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Registration Number</label>
+          <input id="signup-reg" type="text" required placeholder="e.g. 2024001" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Create Password</label>
+          <input id="signup-pass" type="password" required placeholder="Create a password" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm Password</label>
+          <input id="signup-pass2" type="password" required placeholder="Confirm password" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+        </div>
+        <div id="signup-error" class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 rounded-lg px-4 py-2"></div>
+        <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Create Account</button>
+        <p class="text-xs text-gray-500 dark:text-gray-400 text-center">Student registration only. Admin must use login. Credentials are saved for this browser.</p>
+      </form>
+
+      <div class="relative my-6"><div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200 dark:border-gray-600"></div></div><div class="relative flex justify-center text-xs"><span class="bg-white dark:bg-gray-800 px-3 text-gray-400">or</span></div></div>
+      <button id="guest-btn" class="w-full border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium py-2.5 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        Continue as Guest
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== SIDEBAR ========== -->
+<aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col fixed h-full z-10 overflow-y-auto">
+  <div class="px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+    <h1 class="text-xl font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>
+      HMS Dashboard
+    </h1>
+  </div>
+  <nav class="flex-1 py-2 px-3">
+
+    <div class="sidebar-group-label">General</div>
+    <a href="#" data-section="overview" class="sidebar-link active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+      Overview
+    </a>
+    <a href="#" data-section="rooms" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+      Room Status
+    </a>
+    <a href="#" data-section="students" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/></svg>
+      Student Directory
+    </a>
+    <a href="#" data-section="lodge" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Lodge Complaint
+    </a>
+    <a href="#" data-section="complaints" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      Recent Complaints
+    </a>
+    <a href="#" data-section="movement" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+      Movement Requests
+    </a>
+    <a href="#" data-section="mess" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Mess
+    </a>
+    <a href="#" data-section="payments" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
+      Payments
+    </a>
+
+    <div class="sidebar-group-label admin-only hidden mt-2">Admin</div>
+    <a href="#" data-section="manage-rooms" class="sidebar-link admin-only hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35"/></svg>
+      Manage Rooms
+    </a>
+    <a href="#" data-section="manage" class="sidebar-link admin-only hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/></svg>
+      Manage Students
+    </a>
+    <a href="#" data-section="manage-wardens" class="sidebar-link admin-only hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg>
+      Manage Wardens
+    </a>
+    <a href="#" data-section="manage-parents" class="sidebar-link admin-only hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950 dark:text-gray-300">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
+      Manage Parents
+    </a>
+  </nav>
+  <div class="px-4 py-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center">&copy; 2026 HMS &middot; All rights reserved</div>
+</aside>
+
+<!-- ========== MAIN ========== -->
+<main class="ml-64 flex-1 p-8 min-h-screen">
+  <header class="mb-8 flex items-center justify-between">
+    <div>
+      <h2 id="page-title" class="text-2xl font-bold text-gray-900 dark:text-white">Overview</h2>
+      <p id="page-subtitle" class="text-sm text-gray-500 dark:text-gray-400 mt-1">Welcome to the Hostel Management Dashboard</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="dark-toggle" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+        <svg id="icon-sun" class="w-4 h-4 text-amber-500 hidden" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/></svg>
+        <svg id="icon-moon" class="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+        <span id="dark-label" class="text-xs font-medium">Dark</span>
+      </button>
+      <span id="role-badge" class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0"/></svg>
+        <span id="role-text">Guest</span>
+      </span>
+      <span class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
+        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Connected
+      </span>
+      <button id="logout-btn" class="hidden text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">Logout</button>
+    </div>
+  </header>
+
+  <!-- ========== OVERVIEW ========== -->
+  <div id="section-overview" class="section active">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Hostels</p>
+        <p id="stat-hostels" class="text-2xl font-bold mt-1">—</p>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Rooms</p>
+        <p id="stat-rooms" class="text-2xl font-bold mt-1">—</p>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Students</p>
+        <p id="stat-students" class="text-2xl font-bold mt-1">—</p>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Open Complaints</p>
+        <p id="stat-complaints" class="text-2xl font-bold mt-1">—</p>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Pending Movements</p>
+        <p id="stat-movements" class="text-2xl font-bold mt-1">—</p>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <p class="text-xs text-gray-500 dark:text-gray-400">Total Payments</p>
+        <p id="stat-payments" class="text-2xl font-bold mt-1">—</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-semibold mb-4">Recent Activity</h3>
+        <div id="overview-activity" class="space-y-0 max-h-80 overflow-y-auto pr-1"><p class="text-gray-400 text-sm">Loading...</p></div>
+      </div>
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-semibold mb-4">Latest Complaints</h3>
+        <div id="overview-complaints" class="space-y-3 max-h-72 overflow-y-auto pr-1"><p class="text-gray-400 text-sm">Loading...</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== ROOM STATUS ========== -->
+  <div id="section-rooms" class="section">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+      <h3 class="text-lg font-semibold mb-1">Room Status</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Occupancy and beds remaining per room</p>
+      <div id="room-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <p class="text-gray-400 text-sm col-span-full">Loading rooms...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== STUDENT DIRECTORY ========== -->
+  <div id="section-students" class="section">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
+        <div><h3 class="text-lg font-semibold">Student Directory</h3><p class="text-sm text-gray-500 dark:text-gray-400">All registered students</p></div>
+        <input id="student-search" type="text" placeholder="Search by name or reg no..." class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-72" />
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+            <tr>
+              <th class="px-4 py-3 rounded-tl-lg">Reg No</th>
+              <th class="px-4 py-3">Name</th>
+              <th class="px-4 py-3">Branch</th>
+              <th class="px-4 py-3">Year</th>
+              <th class="px-4 py-3">Mobile</th>
+              <th class="px-4 py-3">Email</th>
+              <th class="px-4 py-3">Room</th>
+              <th class="px-4 py-3 rounded-tr-lg">Hostel</th>
+            </tr>
+          </thead>
+          <tbody id="student-tbody" class="divide-y divide-gray-100 dark:divide-gray-700">
+            <tr><td colspan="8" class="px-4 py-6 text-center text-gray-400">Loading students...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== LODGE COMPLAINT ========== -->
+  <div id="section-lodge" class="section">
+    <div class="max-w-xl">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <h3 class="text-lg font-semibold mb-1">Lodge a Complaint</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">Submit a new complaint to the hostel administration</p>
+        
+        <div id="lodge-student-info" class="hidden mb-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+          <p class="text-sm text-emerald-700 dark:text-emerald-300"><span class="font-medium" id="lodge-student-name"></span> — Reg #<span class="font-medium" id="lodge-student-reg"></span></p>
+        </div>
+
+        <form id="complaint-form" class="space-y-5">
+          <div id="comp-reg-wrapper">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Registration Number</label>
+            <select id="comp-reg" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+              <option value="">Select student...</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+            <textarea id="comp-desc" rows="4" required placeholder="Describe your complaint in detail..." class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
+          </div>
+          <button type="submit" id="comp-submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Submit Complaint</button>
+        </form>
+        <div id="comp-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== RECENT COMPLAINTS ========== -->
+  <div id="section-complaints" class="section">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+      <div class="flex items-center justify-between mb-5">
+        <div><h3 class="text-lg font-semibold">Recent Complaints</h3><p class="text-sm text-gray-500 dark:text-gray-400">Updates in real-time</p></div>
+        <span class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-indigo-100 text-indigo-700"><span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span> Live</span>
+      </div>
+      <div id="complaints-list" class="space-y-4"><p class="text-gray-400 text-sm">Loading complaints...</p></div>
+    </div>
+  </div>
+
+  <!-- ========== MOVEMENT REQUESTS ========== -->
+  <div id="section-movement" class="section">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">New Movement Request</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Submit an in/out request</p>
+
+          <div id="movement-student-info" class="hidden mb-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+            <p class="text-sm text-emerald-700 dark:text-emerald-300"><span class="font-medium" id="movement-student-name"></span> — Reg #<span class="font-medium" id="movement-student-reg"></span></p>
+          </div>
+
+          <form id="movement-form" class="space-y-4">
+            <div id="mv-reg-wrapper">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Student</label>
+              <select id="mv-reg" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select student...</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Out Date</label>
+              <input id="mv-out" type="date" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">In Date (Return)</label>
+              <input id="mv-in" type="date" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+              <textarea id="mv-reason" rows="3" placeholder="Reason for going out..." class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Submit Request</button>
+          </form>
+          <div id="mv-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <div class="flex items-center justify-between mb-5">
+            <div><h3 class="text-lg font-semibold">Movement Requests</h3><p class="text-sm text-gray-500 dark:text-gray-400">Track approval status</p></div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 rounded-tl-lg">Student</th>
+                  <th class="px-4 py-3">Out Date</th>
+                  <th class="px-4 py-3">In Date</th>
+                  <th class="px-4 py-3">Parent</th>
+                  <th class="px-4 py-3">Admin</th>
+                  <th id="movement-actions-head" class="px-4 py-3 rounded-tr-lg hidden">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="movement-tbody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                <tr><td colspan="6" class="px-4 py-6 text-center text-gray-400">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MESS ========== -->
+  <div id="section-mess" class="section">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">Apply for Mess</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Register a student for mess services</p>
+          <form id="mess-form" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Student</label>
+              <select id="mess-reg" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select student...</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Menu Type</label>
+              <select id="mess-menu" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select type...</option>
+                <option value="Veg">Veg</option>
+                <option value="Non-Veg">Non-Veg</option>
+                <option value="Vegan">Vegan</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monthly Fee (₹)</label>
+              <input id="mess-fee" type="number" required min="0" placeholder="e.g. 3000" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Apply Date</label>
+              <input id="mess-apply" type="date" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Apply for Mess</button>
+          </form>
+          <div id="mess-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-5">Mess Registrations</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 rounded-tl-lg">Student</th>
+                  <th class="px-4 py-3">Menu Type</th>
+                  <th class="px-4 py-3">Monthly Fee</th>
+                  <th class="px-4 py-3">Apply Date</th>
+                  <th class="px-4 py-3">Reply Date</th>
+                  <th class="px-4 py-3 rounded-tr-lg">Status</th>
+                </tr>
+              </thead>
+              <tbody id="mess-tbody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                <tr><td colspan="6" class="px-4 py-6 text-center text-gray-400">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== PAYMENTS ========== -->
+  <div id="section-payments" class="section">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">Record Payment</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Log a fee payment from a parent/student</p>
+          <form id="payment-form" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Student</label>
+              <select id="pay-reg" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select student...</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount (₹)</label>
+              <input id="pay-amount" type="number" required min="1" placeholder="e.g. 5000" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Date</label>
+              <input id="pay-date" type="date" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Mode</label>
+              <select id="pay-mode" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select mode...</option>
+                <option value="Cash">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Cheque">Cheque</option>
+              </select>
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Record Payment</button>
+          </form>
+          <div id="pay-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-5">Payment History</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 rounded-tl-lg">Payment ID</th>
+                  <th class="px-4 py-3">Student</th>
+                  <th class="px-4 py-3">Amount</th>
+                  <th class="px-4 py-3">Mode</th>
+                  <th class="px-4 py-3 rounded-tr-lg">Date</th>
+                </tr>
+              </thead>
+              <tbody id="payment-tbody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                <tr><td colspan="5" class="px-4 py-6 text-center text-gray-400">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MANAGE ROOMS (Admin) ========== -->
+  <div id="section-manage-rooms" class="section">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">Create Room</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Add a new room to the system</p>
+          <form id="add-room-form" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Room Number</label>
+              <input id="ar-roomno" type="number" required min="1" placeholder="e.g. 101" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Capacity (beds)</label>
+              <input id="ar-capacity" type="number" required min="1" max="20" placeholder="e.g. 4" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hostel</label>
+              <select id="ar-hostel" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select hostel...</option>
+              </select>
+            </div>
+            <button type="submit" id="ar-submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Create Room</button>
+          </form>
+          <div id="ar-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">All Rooms</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Delete only empty rooms</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 rounded-tl-lg">Room No</th>
+                  <th class="px-4 py-3">Hostel</th>
+                  <th class="px-4 py-3">Capacity</th>
+                  <th class="px-4 py-3">Occupied</th>
+                  <th class="px-4 py-3">Available</th>
+                  <th class="px-4 py-3 rounded-tr-lg text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="admin-room-tbody" class="divide-y divide-gray-100 dark:divide-gray-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MANAGE STUDENTS (Admin) ========== -->
+  <div id="section-manage" class="section">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">Add Student</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Register a new student</p>
+          <form id="add-student-form" class="space-y-4">
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Registration No</label><input id="as-reg" type="text" required placeholder="e.g. 2024001" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label><input id="as-name" type="text" required placeholder="Student name" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Branch</label><input id="as-branch" type="text" required placeholder="e.g. CSE" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile</label><input id="as-mobile" type="tel" placeholder="e.g. 9876543210" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label><input id="as-email" type="email" placeholder="student@example.com" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Year</label>
+                <select id="as-year" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <option value="">Select</option><option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option><option value="4">4th</option>
+                </select>
+              </div>
+              <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Room No</label>
+                <select id="as-room" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <option value="">Select</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" id="as-submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Add Student</button>
+          </form>
+          <div id="as-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <div class="flex items-center justify-between mb-5">
+            <div><h3 class="text-lg font-semibold">All Students</h3><p class="text-sm text-gray-500 dark:text-gray-400">Manage student records</p></div>
+            <div class="flex items-center gap-3">
+              <button onclick="deleteAllStudents()" class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 border border-red-200 dark:border-red-800 transition-colors">Delete All</button>
+              <input id="admin-student-search" type="text" placeholder="Search..." class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48" />
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 rounded-tl-lg">Reg No</th>
+                  <th class="px-4 py-3">Name</th>
+                  <th class="px-4 py-3">Branch</th>
+                  <th class="px-4 py-3">Year</th>
+                  <th class="px-4 py-3">Room</th>
+                  <th class="px-4 py-3 rounded-tr-lg text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="admin-student-tbody" class="divide-y divide-gray-100 dark:divide-gray-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MANAGE WARDENS (Admin) ========== -->
+  <div id="section-manage-wardens" class="section">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">Add Warden</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Assign a warden to a hostel</p>
+          <form id="add-warden-form" class="space-y-4">
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Warden ID</label><input id="aw-id" type="text" required placeholder="e.g. W001" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label><input id="aw-name" type="text" required placeholder="Warden name" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile</label><input id="aw-mobile" type="tel" required placeholder="e.g. 9876543210" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned Hostel</label>
+              <select id="aw-hostel" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select hostel...</option>
+              </select>
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Add Warden</button>
+          </form>
+          <div id="aw-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-5">All Wardens</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 rounded-tl-lg">Warden ID</th>
+                  <th class="px-4 py-3">Name</th>
+                  <th class="px-4 py-3">Mobile</th>
+                  <th class="px-4 py-3">Hostel</th>
+                  <th class="px-4 py-3 rounded-tr-lg text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="warden-tbody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                <tr><td colspan="5" class="px-4 py-6 text-center text-gray-400">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MANAGE PARENTS (Admin) ========== -->
+  <div id="section-manage-parents" class="section">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-1">Add Parent</h3>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-5">Link a parent/guardian to a student</p>
+          <form id="add-parent-form" class="space-y-4">
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Parent ID</label><input id="ap-id" type="text" required placeholder="e.g. P001" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label><input id="ap-name" type="text" required placeholder="Parent name" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mobile</label><input id="ap-mobile" type="tel" required placeholder="e.g. 9876543210" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label><input id="ap-email" type="email" required placeholder="parent@example.com" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Login Password</label><input id="ap-pass" type="password" placeholder="Optional (defaults to mobile)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>
+            <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Linked Student</label>
+              <select id="ap-reg" required class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Select student...</option>
+              </select>
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">Add Parent</button>
+          </form>
+          <div id="ap-msg" class="mt-4 hidden text-sm rounded-lg px-4 py-3"></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <h3 class="text-lg font-semibold mb-5">All Parents</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-xs tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 rounded-tl-lg">Parent ID</th>
+                  <th class="px-4 py-3">Name</th>
+                  <th class="px-4 py-3">Mobile</th>
+                  <th class="px-4 py-3">Email</th>
+                  <th class="px-4 py-3">Student</th>
+                  <th class="px-4 py-3 rounded-tr-lg text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="parent-tbody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                <tr><td colspan="6" class="px-4 py-6 text-center text-gray-400">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="scripts/state-helpers.js"></script>
+<script src="scripts/features-data.js"></script>
+<script src="scripts/auth-navigation.js"></script>
+</body>
+</html>
