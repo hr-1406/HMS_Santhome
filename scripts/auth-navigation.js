@@ -231,30 +231,53 @@ function showDashboard(role) {
   const roleBadge = document.getElementById('role-badge');
   const logoutBtn = document.getElementById('logout-btn');
   const movementActionsHead = document.getElementById('movement-actions-head');
+  const sidebarLink = sec => document.querySelector(`.sidebar-link[data-section="${sec}"]`);
+  const setLinkHidden = (sec, hidden) => {
+    const el = sidebarLink(sec);
+    if (!el) return;
+    el.classList.toggle('hidden', hidden);
+  };
+
+  // Base visibility for common sections, then apply role restrictions below.
+  ['overview', 'rooms', 'students', 'lodge', 'complaints', 'movement', 'mess', 'payments'].forEach(sec => setLinkHidden(sec, false));
+  ['manage', 'manage-rooms', 'manage-wardens', 'manage-parents'].forEach(sec => setLinkHidden(sec, true));
+
   if (role === 'admin') {
     roleText.textContent = 'Admin';
     roleBadge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300';
     document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+    setLinkHidden('manage', false);
+    setLinkHidden('manage-rooms', false);
+    setLinkHidden('manage-wardens', false);
+    setLinkHidden('manage-parents', false);
     logoutBtn.classList.remove('hidden');
     movementActionsHead.classList.remove('hidden');
   } else if (role === 'warden') {
     roleText.textContent = 'Warden (' + currentWardenId + ')';
     roleBadge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-300';
     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
-    const manageStudentsLink = document.querySelector('.sidebar-link[data-section="manage"]');
-    if (manageStudentsLink) manageStudentsLink.classList.remove('hidden');
+    setLinkHidden('manage', false);
+    setLinkHidden('manage-rooms', false);
     logoutBtn.classList.remove('hidden');
     movementActionsHead.classList.remove('hidden');
   } else if (role === 'parent') {
     roleText.textContent = 'Parent (' + currentParentId + ')';
     roleBadge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300';
     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
+    setLinkHidden('rooms', true);
+    setLinkHidden('students', true);
+    setLinkHidden('lodge', true);
+    setLinkHidden('mess', true);
+    setLinkHidden('complaints', true);
     logoutBtn.classList.remove('hidden');
     movementActionsHead.classList.remove('hidden');
   } else if (role === 'student') {
     roleText.textContent = 'Student (' + currentStudentReg + ')';
     roleBadge.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300';
     document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
+    setLinkHidden('rooms', true);
+    setLinkHidden('students', true);
+    setLinkHidden('payments', true);
     logoutBtn.classList.remove('hidden');
     movementActionsHead.classList.add('hidden');
   } else {
@@ -424,13 +447,17 @@ const meta = {
 };
 
 const adminSections = ['manage', 'manage-rooms', 'manage-wardens', 'manage-parents'];
-const wardenSections = ['manage'];
+const wardenSections = ['manage', 'manage-rooms'];
+const studentBlockedSections = ['rooms', 'students', 'payments'];
+const parentBlockedSections = ['rooms', 'students', 'lodge', 'mess', 'complaints'];
 
 links.forEach(link => {
   link.addEventListener('click', e => {
     e.preventDefault();
     const sec = link.dataset.section;
     if (adminSections.includes(sec) && currentRole !== 'admin' && !(currentRole === 'warden' && wardenSections.includes(sec))) return;
+    if (currentRole === 'student' && studentBlockedSections.includes(sec)) return;
+    if (currentRole === 'parent' && parentBlockedSections.includes(sec)) return;
     links.forEach(l => l.classList.remove('active'));
     link.classList.add('active');
     sections.forEach(s => s.classList.remove('active'));
